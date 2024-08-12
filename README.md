@@ -15,4 +15,7 @@ This Python project utilizes OpenCV and scikit-learn for training a Support Vect
 - scikit-learn
 
   
-![image](https://github.com/ChinmayW72/Face_Detection/assets/159627244/3ca56713-b6f6-4d05-8ded-01bbd5148119)
+![WhatsApp Image 2024-04-23 at 18 11 09_4df47978](https://github.com/user-attachments/assets/07804eb5-935b-4ac5-b5b2-598f0333b6c2)
+![WhatsApp Image 2024-04-23 at 18 21 43_7f76307e](https://github.com/user-attachments/assets/d5c959f6-9c68-4478-ad55-5abe91b58b17)
+
+
