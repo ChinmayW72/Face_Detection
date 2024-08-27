@@ -1,69 +1,93 @@
-import os
-import cv2
+import tensorflow as tf
+from tensorflow import keras
 import numpy as np
-from tqdm import tqdm
-from sklearn.preprocessing import LabelEncoder
-from sklearn.svm import SVC
+import cv2
+import winsound  # For generating beep sound
+from twilio.rest import Client  # For sending SMS alerts
 
-# Function to load JPG images and their labels
-def load_images_from_folder(folder):
-    images = []
-    labels = []
-    for filename in tqdm(os.listdir(folder), desc="Loading images"):
-        if filename.endswith(".jpg") or filename.endswith(".JPG"):
-            img = cv2.imread(os.path.join(folder, filename))
-            if img is not None:
-                images.append(img)
-                # Extract label from filename
-                label = filename.split("(")[1].split(")")[0]
-                labels.append(label)
-                print(f"Image: {filename}, Label: {label}")
-    return images, labels
+# Load the pre-trained face detection model
+facedetect = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-# Function to extract face embeddings using a pre-trained model
-def extract_embeddings(images, target_size=(100, 100)):
-    embeddings = []
-    for image in tqdm(images, desc="Extracting embeddings"):
-        # Convert image to grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+# Load the pre-trained face recognition model
+model = keras.models.load_model(r"C:\Users\SomeshP\Downloads\converted_keras (1)\keras_model.h5")
+
+# Define a function to map class indices to class names
+def get_class_name(class_no):
+    class_names = ["somesh", "unknown", "chinmay"]
+    return class_names[class_no]
+
+# Initialize video capture from the default camera
+cap = cv2.VideoCapture(0)
+cap.set(3, 640)  # Set the width
+cap.set(4, 480)  # Set the height
+
+# Font settings for displaying text on the video
+font = cv2.FONT_HERSHEY_COMPLEX
+
+# Initialize flag for alert
+alert_sent = False
+
+# Twilio credentials
+account_sid = 'AC2ea4e59b651a513a324714925bc1fbb6'
+auth_token = 'a965ffaa9ff334742a239225c80dd8b0'
+client = Client(account_sid, auth_token)
+
+# Function to send alert message to phone
+def send_alert():
+    message = client.messages.create(
+                    body="Unknown face detected! Please check the security camera.",
+                    from_='+15074364225',
+                    to='+919111269576'
+                )
+
+while True:
+    
+    success, img_original = cap.read()
+    
+    
+    faces = facedetect.detectMultiScale(img_original, 1.3, 5)
+    
+    
+    for x, y, w, h in faces:
+        # Extract the face region
+        crop_img = img_original[y:y+h, x:x+w]
         
-        # Detect faces
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
         
-        # Ensure only one face is detected per image
-        if len(faces) == 1:
-            (x, y, w, h) = faces[0]
-            
-            # Crop and resize face region to target size
-            face_roi_resized = cv2.resize(gray[y:y+h, x:x+w], target_size)
-            
-            # Flatten the face embedding
-            flattened_embedding = face_roi_resized.flatten()
-            embeddings.append(flattened_embedding)
+        img = cv2.resize(crop_img, (224, 224))
+        img = img / 255.0  
+        img = np.expand_dims(img, axis=0)  
+        
     
-    return embeddings
+        prediction = model.predict(img)
+        class_index = np.argmax(prediction)
+        probability_value = np.amax(prediction)
+        
+        
+        cv2.rectangle(img_original, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        
+        
+        cv2.putText(img_original, str(get_class_name(class_index)), (x, y-10), font, 0.75, (255, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(img_original, str(round(probability_value * 100, 2)) + "%", (x, y+h+25), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+        
+        
+        if get_class_name(class_index) == "unknown":
+            if not alert_sent:
+                
+                winsound.Beep(1000, 2000)  
+                
+                send_alert()
+                alert_sent = True
+        else:
+            alert_sent = False
 
-# Main function to train the model
-def train_model(images_folder, model_output_file):
-    images, labels = load_images_from_folder(images_folder)
-    if len(images) != len(labels):
-        raise ValueError("Number of images and labels do not match.")
     
-    face_embeddings = extract_embeddings(images)
+    cv2.imshow("Face Recognition", img_original)
     
-    # Convert labels into numerical form
-    label_encoder = LabelEncoder()
-    labels_encoded = label_encoder.fit_transform(labels)
     
-    # Train Support Vector Machine (SVM) classifier with adjusted threshold
-    svm = SVC(C=1.0, kernel='linear', probability=True)
-    svm.fit(np.array(face_embeddings), labels_encoded)
-    
-    # Save trained model to file
-    with open(model_output_file, 'wb') as f:
-        np.save(f, label_encoder.classes_)
-        np.save(f, svm)
+    key = cv2.waitKey(1)
+    if key == ord('q'):
+        break
 
-# Example usage with the provided folder location:
-train_model(r"D:\MY WEBSITES\Drowsiness\face", 'trained_model12.npy')
+
+cap.release()
+cv2.destroyAllWindows()
